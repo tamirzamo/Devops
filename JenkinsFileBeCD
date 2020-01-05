@@ -1,0 +1,46 @@
+import groovy.json.JsonSlurper
+import hudson.model.*
+def Current_version
+def path_json_file
+def deployment_name = 'intapi-deployment'
+pipeline {
+
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+    agent { label 'master' }
+    stages {
+        stage('GetVersion') {
+            steps {
+                script {
+                    dir('Release') {
+                        deleteDir()
+                        checkout([$class: 'GitSCM', branches: [[name: 'master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'git-cred', url: "https://github.com/intclassproject/Release"]]])
+                        path_json_file = sh(script: "pwd", returnStdout: true).trim() + '/' + 'dev' + '.json'
+                        Current_version = Return_Json_From_File("$path_json_file").Services.INT_API
+
+                    }
+
+                }
+            }
+        }
+        stage('Deployment'){
+            steps{
+                script{
+                    dir('Deployment'){
+                        sh "sed -i 's/{{version}}/$Current_version/'intapi.yaml"
+                        sh """
+                               export PATH=/bin/bash:$PATH
+                               export KUBECONFIG=/var/jenkins_home/admin.conf
+                               kubectl apply -f intapi.yaml
+                           """
+                    }
+                }
+            }
+        }
+    }
+
+}
+def Return_Json_From_File(file_name){
+    return new JsonSlurper().parse(new File(file_name))
+}
